@@ -14,7 +14,7 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
-from datosar import buscar_series, traer_series, IPC_NACIONAL, DOLAR_BNA  # noqa: E402
+from datosar import buscar_series, traer_series, traer_dolares, DOLARES, IPC_NACIONAL, DOLAR_BNA  # noqa: E402
 
 FRECUENCIAS = {"R/P1D": "diaria", "R/P1M": "mensual", "R/P3M": "trimestral",
                "R/P6M": "semestral", "R/P1Y": "anual"}
@@ -32,6 +32,11 @@ def buscar(texto):
 @st.cache_data(ttl=3600, show_spinner="Descargando datos…")
 def traer(ids, frecuencia, modo, desde):
     return traer_series(list(ids), frecuencia=frecuencia, modo=modo, desde=desde)
+
+
+@st.cache_data(ttl=3600, show_spinner="Descargando cotizaciones del dólar…")
+def traer_dol(casas, frecuencia, modo, desde):
+    return traer_dolares(list(casas), frecuencia=frecuencia, modo=modo, desde=desde)
 
 
 # ---------- Barra lateral: búsqueda ----------
@@ -62,7 +67,12 @@ with st.sidebar:
         if st.button("Agregar") and nuevo_id.strip():
             st.session_state.elegidas[nuevo_id.strip()] = nuevo_id.strip()
 
-    st.header("2. Series elegidas")
+    st.header("2. Dólares")
+    dolares = st.multiselect("Cotizaciones (ArgentinaDatos)", list(DOLARES.keys()),
+                             format_func=DOLARES.get, placeholder="Elegí uno o más dólares")
+    st.caption("Promedio de la cotización de venta en cada período.")
+
+    st.header("3. Series elegidas")
     for sid, nombre in list(st.session_state.elegidas.items()):
         c1, c2 = st.columns([5, 1])
         c1.write(nombre)
@@ -80,22 +90,27 @@ modo = c2.selectbox("Mostrar", [None, "percent_change", "percent_change_a_year_a
 desde = c3.date_input("Desde", value=pd.Timestamp("2017-01-01"))
 
 ids = tuple(st.session_state.elegidas.keys())
-if not ids:
-    st.info("Elegí al menos una serie en la barra lateral.")
+if not ids and not dolares:
+    st.info("Elegí al menos una serie o un dólar en la barra lateral.")
     st.stop()
 
+partes = []
 try:
-    df = traer(ids, frec, modo, str(desde))
+    if ids:
+        partes.append(traer(ids, frec, modo, str(desde)))
+    if dolares:
+        partes.append(traer_dol(tuple(dolares), frec, modo, str(desde)))
 except Exception as e:
     st.error(f"No se pudieron traer los datos: {e}")
     st.stop()
+df = pd.concat(partes, axis=1).sort_index()
 
 df_largo = df.reset_index().melt(id_vars="indice_tiempo", var_name="serie", value_name="valor")
 if modo:
     df_largo["valor"] = df_largo["valor"] * 100
 
 normalizar = st.checkbox("Normalizar (primer valor = 100) para comparar series de distinta escala",
-                         value=(modo is None and len(ids) > 1))
+                         value=(modo is None and df.shape[1] > 1))
 if normalizar and modo is None:
     df_largo["valor"] = df_largo.groupby("serie")["valor"].transform(
         lambda s: s / s.dropna().iloc[0] * 100 if s.notna().any() else s)
@@ -110,4 +125,5 @@ with st.expander("Ver tabla de datos"):
     st.dataframe(df, width="stretch")
 st.download_button("⬇️ Descargar CSV", df.to_csv().encode("utf-8"),
                    file_name="series.csv", mime="text/csv")
-st.caption("Fuente: API de Series de Tiempo de la República Argentina (apis.datos.gob.ar).")
+st.caption("Fuentes: API de Series de Tiempo de la República Argentina (apis.datos.gob.ar)"
+           + (" · Cotizaciones del dólar: ArgentinaDatos (api.argentinadatos.com)." if dolares else "."))
