@@ -16,6 +16,9 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 from datosar import buscar_series, traer_series, IPC_NACIONAL, DOLAR_BNA  # noqa: E402
 
+FRECUENCIAS = {"R/P1D": "diaria", "R/P1M": "mensual", "R/P3M": "trimestral",
+               "R/P6M": "semestral", "R/P1Y": "anual"}
+
 st.set_page_config(page_title="Laboratorio de datos", page_icon="📊", layout="wide")
 st.title("📊 Laboratorio de datos")
 st.caption("Buscá, compará y descargá series de la API de Series de Tiempo de Argentina.")
@@ -40,12 +43,24 @@ with st.sidebar:
     if "elegidas" not in st.session_state:
         st.session_state.elegidas = {IPC_NACIONAL: "IPC nacional", DOLAR_BNA: "Dólar BNA"}
 
+    solo_mensuales = st.checkbox("Solo series mensuales", value=True)
+    if not resultados.empty and solo_mensuales:
+        resultados = resultados[resultados["frecuencia"] == "R/P1M"]
+
     if not resultados.empty:
         st.write(f"{len(resultados)} resultados")
         for _, fila in resultados.iterrows():
-            etiqueta = f"{fila['descripcion']} ({fila['frecuencia']})"
-            if st.button(f"➕ {etiqueta}", key=fila["id"], width="stretch"):
+            freq = FRECUENCIAS.get(fila["frecuencia"], fila["frecuencia"])
+            hasta = str(fila["hasta"] or "")[:7]
+            if st.button(f"➕ {fila['descripcion']}", key=fila["id"], width="stretch",
+                         help=f"ID: {fila['id']}"):
                 st.session_state.elegidas[fila["id"]] = fila["descripcion"]
+            st.caption(f"{fila['dataset']} · {fila['unidades']} · {freq} · hasta {hasta}")
+
+    with st.expander("Agregar por ID"):
+        nuevo_id = st.text_input("ID de la serie", placeholder="ej. 143.3_NO_PR_2004_A_21")
+        if st.button("Agregar") and nuevo_id.strip():
+            st.session_state.elegidas[nuevo_id.strip()] = nuevo_id.strip()
 
     st.header("2. Series elegidas")
     for sid, nombre in list(st.session_state.elegidas.items()):
