@@ -14,6 +14,9 @@ import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
+import importlib  # noqa: E402
+import datosar  # noqa: E402
+importlib.reload(datosar)  # toma siempre la última versión de src/datosar.py
 from datosar import buscar_series, traer_series, traer_dolares, DOLARES, IPC_NACIONAL, DOLAR_BNA  # noqa: E402
 
 FRECUENCIAS = {"R/P1D": "diaria", "R/P1M": "mensual", "R/P3M": "trimestral",
