@@ -115,8 +115,12 @@ if modo:
 normalizar = st.checkbox("Normalizar (primer valor = 100) para comparar series de distinta escala",
                          value=(modo is None and df.shape[1] > 1))
 if normalizar and modo is None:
+    # Base común: la primera fecha en la que todas las series tienen dato
+    inicio = max(df[c].first_valid_index() for c in df.columns if df[c].notna().any())
+    df_largo = df_largo[df_largo["indice_tiempo"] >= inicio]
     df_largo["valor"] = df_largo.groupby("serie")["valor"].transform(
         lambda s: s / s.dropna().iloc[0] * 100 if s.notna().any() else s)
+    st.caption(f"Base 100 = {inicio:%m/%Y}, el primer período con datos para todas las series.")
 
 fig = px.line(df_largo, x="indice_tiempo", y="valor", color="serie",
               labels={"indice_tiempo": "Fecha", "valor": "%" if modo else "Valor", "serie": "Serie"})
