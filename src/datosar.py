@@ -63,6 +63,49 @@ def traer_series(ids, frecuencia: str | None = None, agregacion: str = "avg",
     return df.set_index("indice_tiempo")
 
 
+# ---------- Dólares (ArgentinaDatos) ----------
+DOLARES = {
+    "oficial": "Dólar oficial",
+    "blue": "Dólar blue",
+    "bolsa": "Dólar MEP",
+    "contadoconliqui": "Dólar CCL",
+    "cripto": "Dólar cripto (USDT)",
+    "mayorista": "Dólar mayorista",
+    "tarjeta": "Dólar tarjeta",
+}
+_REGLA = {None: "MS", "month": "MS", "quarter": "QS", "year": "YS"}
+_PERIODOS_ANIO = {"MS": 12, "QS": 4, "YS": 1}
+
+
+def traer_dolares(casas, frecuencia: str | None = "month", modo: str | None = None,
+                  desde: str | None = None) -> pd.DataFrame:
+    """
+    Cotizaciones diarias de venta de ArgentinaDatos (api.argentinadatos.com),
+    promediadas por mes, trimestre o año. Devuelve el mismo formato que traer_series:
+    índice de fechas al inicio de cada período y una columna por dólar.
+    """
+    if isinstance(casas, str):
+        casas = [casas]
+    regla = _REGLA.get(frecuencia, "MS")
+    columnas = {}
+    for casa in casas:
+        r = requests.get(f"https://api.argentinadatos.com/v1/cotizaciones/dolares/{casa}", timeout=60)
+        r.raise_for_status()
+        d = pd.DataFrame(r.json())
+        d["fecha"] = pd.to_datetime(d["fecha"])
+        s = d.set_index("fecha")["venta"].astype(float).resample(regla).mean()
+        columnas[f"dolar_{casa}"] = s
+    df = pd.DataFrame(columnas)
+    df.index.name = "indice_tiempo"
+    if modo == "percent_change":
+        df = df.pct_change(fill_method=None)
+    elif modo == "percent_change_a_year_ago":
+        df = df.pct_change(_PERIODOS_ANIO[regla], fill_method=None)
+    if desde:
+        df = df[df.index >= pd.Timestamp(desde)]
+    return df
+
+
 # Series de ejemplo (si alguna dejara de actualizarse, buscá su reemplazo con buscar_series)
 IPC_NACIONAL = "148.3_INIVELNAL_DICI_M_26"       # IPC nivel general, total nacional
 DOLAR_BNA = "168.1_T_CAMBIOR_D_0_0_26"           # Tipo de cambio BNA, vendedor, diario
